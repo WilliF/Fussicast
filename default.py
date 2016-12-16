@@ -6,7 +6,7 @@ import xbmc, xbmcgui, xbmcplugin, xbmcaddon
 from resources.lib.modules import control,myLists,client
 from resources.lib.modules.log_utils import log
 
-addon = Addon('Fussicast', sys.argv)
+addon = Addon('plugin.video.castaway', sys.argv)
 addon_handle = int(sys.argv[1])
 
 if not os.path.exists(control.dataPath):
@@ -25,11 +25,88 @@ mode = args.get('mode', None)
 
 
 if mode is None:
-    addon.add_item({'mode': 'p2p_corner'}, {'title':'Fussball'}, img=icon_path('p2p_corner.jpg'), fanart=fanart,is_folder=True) 
+    addon.add_item({'mode': 'p2p_corner'}, {'title':'P2P Fussball'}, img=icon_path('p2p_corner.jpg'), fanart=fanart,is_folder=True)   
     addon.end_of_directory()
     from resources.lib.modules import cache, control, changelog
     cache.get(changelog.get, 600000000, control.addonInfo('version'), table='changelog')
     
+
+elif mode[0]=='my_castaway':
+    #addon.add_item({'mode': 'favourites'}, {'title':'Favourites'}, img=icon_path('favourites.jpg'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'my_lists'}, {'title':'My Lists'}, img=icon_path('my_lists.jpg'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'keyboard_open'}, {'title':'Open URL'}, img=icon_path('my_castaway.jpg'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'x'}, {'title':'[COLOR yellow]Follow me @natko1412[/COLOR]'}, img=icon_path('twitter.png'), fanart=fanart)
+    addon.end_of_directory()
+
+
+elif mode[0]=='keyboard_open':
+    keyboard = xbmc.Keyboard('', 'Enter URL:', False)
+    keyboard.doModal()
+    if keyboard.isConfirmed():
+        query = keyboard.getText()
+        if query.startswith('livestreamer'):
+            from resources.lib.resolvers import livestreamer
+            resolved = livestreamer.resolve(query)
+        else:
+            import liveresolver
+            url=query
+            resolved = liveresolver.resolve(url,cache_timeout=0)
+        xbmc.Player().play(resolved)
+
+elif mode[0] == 'live_sport':
+    sources = os.listdir(AddonPath + '/resources/lib/sources/live_sport')
+    sources.remove('__init__.py')
+    for source in sources:
+        if '.pyo' not in source and '__init__' not in source:
+            try:
+                source = source.replace('.py','')
+                exec "from resources.lib.sources.live_sport import %s"%source
+                info = eval(source+".info()")
+                addon.add_item({'mode': 'open_live_sport', 'site': info.mode}, {'title': info.name}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+            except:
+                pass
+    addon.end_of_directory()
+
+
+
+elif mode[0] == 'live_tv':
+    sources = os.listdir(AddonPath + '/resources/lib/sources/live_tv')
+    sources.remove('__init__.py')
+    for source in sources:
+        if '.pyo' not in source and '__init__' not in source:
+            #try:
+                source = source.replace('.py','')
+                exec "from resources.lib.sources.live_tv import %s"%source
+                info = eval(source+".info()")
+                addon.add_item({'mode': 'open_live_tv', 'site': info.mode}, {'title': info.name}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+            #except:
+            #    pass
+    addon.end_of_directory()
+
+
+elif mode[0] == 'on_demand_sport_categories':
+    addon.add_item({'mode': 'on_demand_sport', 'category':'football'}, {'title':'Football'}, img=icon_path('icons/soccer.png'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'on_demand_sport', 'category':'basketball'}, {'title':'Basketball'}, img=icon_path('icons/basketball.png'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'on_demand_sport', 'category':'american_football'}, {'title':'American Football'}, img=icon_path('icons/football.png'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'on_demand_sport', 'category':'hockey'}, {'title':'Hockey'}, img=icon_path('icons/hockey.png'), fanart=fanart,is_folder=True)
+    addon.add_item({'mode': 'on_demand_sport', 'category':'Other'}, {'title':'Other'}, img=icon_path('icons/tennis.png'), fanart=fanart,is_folder=True)
+
+    addon.end_of_directory()
+
+elif mode[0] == 'on_demand_sport':
+    cat = args['category'][0]
+    sources = os.listdir(AddonPath + '/resources/lib/sources/on_demand_sport/%s'%cat)
+    sources.remove('__init__.py')
+    for source in sources:
+        if '.pyo' not in source and '__init__' not in source:
+            #try:
+                source = source.replace('.py','')
+                exec "from resources.lib.sources.on_demand_sport.%s import %s"%(cat,source)
+                info = eval(source+".info()")
+                addon.add_item({'mode': 'open_demand_sport', 'site': info.mode, 'category':cat}, {'title': info.name}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+            #except:
+            #    pass
+    addon.end_of_directory()
 
 elif mode[0] == 'p2p_corner':
     sources = os.listdir(AddonPath + '/resources/lib/sources/p2p_sport')
@@ -57,6 +134,127 @@ elif mode[0] == 'p2p_corner':
 
 
 
+elif mode[0] == 'open_live_sport':
+    
+    site = args['site'][0]
+    try:
+        next_page = args['next'][0]
+    except:
+        next_page = None
+    exec "from resources.lib.sources.live_sport import %s"%site
+    info = eval(site+".info()")
+    if not info.categorized:
+        if next_page:
+            source = eval(site+".main(url=next_page)")
+        else:
+            source = eval(site+".main()")
+        events = source.events()
+        for event in events:
+            if not info.multilink:
+                browser = 'plugin://plugin.program.chrome.launcher/?url=%s&mode=showSite&stopPlayback=no'%(event[0])
+                context = [('Open in browser','RunPlugin(%s)'%browser)]
+                addon.add_video_item({'mode': 'play_special_sport', 'url': event[0], 'title':event[1], 'img': icon_path(info.icon),'site':site}, {'title': event[1]}, img=icon_path(info.icon), fanart=fanart, contextmenu_items=context)
+            else:
+                addon.add_item({'mode': 'get_sport_event','site':site, 'url': event[0], 'title':event[1], 'img': icon_path(info.icon)}, {'title': event[1]}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+        if (info.paginated and source.next_page()):
+            addon.add_item({'mode': 'open_live_sport', 'site': info.mode, 'next' : source.next_page()}, {'title': 'Next Page >>'}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+
+    else:
+        source = eval(site+".main()")
+        categories  = source.categories()
+        for cat in categories:
+            addon.add_item({'mode': 'open_sport_cat', 'url': cat[0], 'site': info.mode}, {'title': cat[1]}, img=icon_path(cat[2]), fanart=fanart,is_folder=True)
+
+    addon.end_of_directory()
+
+
+
+
+elif mode[0] == 'open_live_tv':
+    
+    site = args['site'][0]
+    try:
+        next_page = args['next'][0]
+    except:
+        next_page = None
+    exec "from resources.lib.sources.live_tv import %s"%site
+    info = eval(site+".info()")
+    
+    if not info.categorized:
+        if next_page:
+            source = eval(site+".main(url=next_page)")
+        else:
+            source = eval(site+".main()")
+        channels = source.channels()
+        try: special = info.special
+        except: special = False
+        for channel in channels:
+            if not info.multilink:
+                browser = 'plugin://plugin.program.chrome.launcher/?url=%s&mode=showSite&stopPlayback=no'%(channel[0])
+                context = [('Open in browser','RunPlugin(%s)'%browser)]
+                if not special:
+                    addon.add_video_item({'mode': 'play_special', 'url': channel[0], 'title': channel[1], 'img':channel[2], 'site': site}, {'title': channel[1]}, img=channel[2], fanart=fanart, contextmenu_items=context)
+                else:
+                    addon.add_item({'mode': 'play_folder', 'url': channel[0], 'title': channel[1], 'img':channel[2], 'site': site}, {'title': channel[1]}, img=channel[2], fanart=fanart, contextmenu_items=context,is_folder=True)
+
+            else:
+
+                addon.add_item({'mode': 'get_tv_event', 'url': channel[0],'site':site , 'title':channel[1], 'img': channel[2]}, {'title': channel[1]}, img=channel[2], fanart=fanart,is_folder=True)
+
+        if (info.paginated and source.next_page()):
+            addon.add_item({'mode': 'open_live_tv', 'site': info.mode, 'next' : source.next_page()}, {'title': 'Next Page >>'}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+    else:
+        source = eval(site+".main()")
+        categories  = source.categories()
+        for cat in categories:
+            thumb = cat[2]
+            if not 'http' in thumb:
+                thumb = icon_path(thumb)
+            addon.add_item({'mode': 'open_tv_cat', 'url': cat[0], 'site': info.mode}, {'title': cat[1]}, img=thumb, fanart=fanart, is_folder=True)
+
+
+    addon.end_of_directory()
+
+elif mode[0] == 'open_p2p_sport':
+    
+    site = args['site'][0]
+    try:
+        next_page = args['next'][0]
+    except:
+        next_page = None
+    exec "from resources.lib.sources.p2p_sport import %s"%site
+    info = eval(site+".info()")
+    if not info.categorized:
+        if next_page:
+            source = eval(site+".main(url=next_page)")
+        else:
+            source = eval(site+".main()")
+        channels = source.channels()
+        for event in channels:
+            if not info.multilink:
+                browser = 'plugin://plugin.program.chrome.launcher/?url=%s&mode=showSite&stopPlayback=no'%(event[0])
+                context = [('Open in browser','RunPlugin(%s)'%browser)]
+                addon.add_video_item({'mode': 'play_p2p', 'url': event[0],'title':event[1], 'img': event[2], 'site':site}, {'title': event[1]}, img=event[2], fanart=fanart, contextmenu_items=context)
+            else:
+                addon.add_item({'mode': 'get_p2p_event', 'url': event[0],'site':site , 'title':event[1], 'img': event[2]}, {'title': event[1]}, img=event[2], fanart=fanart,is_folder=True)
+    
+        if (info.paginated and source.next_page()):
+            addon.add_item({'mode': 'open_p2p_sport', 'site': info.mode, 'next' : source.next_page()}, {'title': 'Next Page >>'}, img=icon_path(info.icon), fanart=fanart,is_folder=True)
+    else:
+        source = eval(site+".main()")
+        categories  = source.categories()
+        for cat in categories:
+            from resources.lib.modules import constants
+            adult = False
+            for a in constants.adult:
+                if a in cat[1].lower():
+                    adult = True
+            from resources.lib.modules import parental
+            parent = parental.Parental()
+            if not adult or parent.isVisible():
+                addon.add_item({'mode': 'open_p2p_cat', 'url': cat[0], 'site': info.mode, 'adult':adult}, {'title': cat[1]}, img=icon_path(cat[2]), fanart=fanart,is_folder=True)
+
+    addon.end_of_directory()
 
 
 
